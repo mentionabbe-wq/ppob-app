@@ -14,6 +14,10 @@ backend/storage/framework/views/*
 backend/storage/logs/*
 backend/storage/app/public/*
 backend/bootstrap/cache/*
+# Git tidak bisa memasukkan kembali berkas di dalam direktori yang sudah
+# dikecualikan, jadi direktori bersarang ini di-negasikan lebih dulu.
+!backend/storage/framework/cache/data
+backend/storage/framework/cache/data/*
 !**/.gitkeep
 backend/public/storage
 backend/public/hot
