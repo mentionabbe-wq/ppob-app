@@ -8,9 +8,10 @@
 #  Migrasi database, pembuatan APP_KEY, dan data awal dijalankan
 #  otomatis oleh container saat pertama kali start.
 #
-#  SEBELUM INSTALL — ganti dua baris ini:
-#    DB_PASSWORD  (di service mysql DAN app DAN queue DAN scheduler)
-#    APP_URL      (sesuaikan IP CasaOS Anda)
+#  SEBELUM INSTALL — ganti dua hal:
+#    1. APP_URL   → sesuaikan IP CasaOS dan port Anda
+#    2. Sandi database → ganti di 4 tempat (app, queue, scheduler, mysql),
+#       semuanya harus sama persis
 #
 #  Setelah tampil "running", tunggu ±1 menit lalu buka:
 #    http://IP-CASAOS:8081/admin      →  admin@ppob.test / password
@@ -28,9 +29,10 @@ services:
     restart: unless-stopped
     ports:
       # Port 80 dipakai UI CasaOS, jadi aplikasi ini di 8081.
+      # Ubah angka kiri saja bila bentrok dengan aplikasi lain.
       - "8081:80"
     volumes:
-      - ppob-storage:/var/www/html/storage
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
     depends_on:
       - app
     networks:
@@ -46,7 +48,8 @@ services:
       APP_NAME: PPOB App
       APP_ENV: production
       APP_DEBUG: "false"
-      # ── GANTI: alamat yang dipakai aplikasi mobile & panel admin ──
+      # ── GANTI: alamat yang dipakai panel admin & aplikasi mobile ──
+      # Harus sama dengan port di service web di atas.
       APP_URL: http://192.168.1.100:8081
       DB_HOST: mysql
       DB_PORT: "3306"
@@ -60,7 +63,7 @@ services:
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
       # Email OTP — isi SMTP Anda (Gmail app password, Mailgun, dll).
-      # Dibiarkan kosong = OTP hanya tercatat di log, tidak terkirim.
+      # Nilai "log" berarti OTP hanya tercatat di log, tidak terkirim.
       MAIL_MAILER: log
       MAIL_HOST: ""
       MAIL_PORT: "587"
@@ -69,12 +72,10 @@ services:
       MAIL_ENCRYPTION: tls
       MAIL_FROM_ADDRESS: noreply@ppob.local
     volumes:
-      - ppob-storage:/var/www/html/storage
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - mysql
+      - redis
     networks:
       - ppob
 
@@ -95,7 +96,7 @@ services:
       DB_PASSWORD: ganti-sandi-ini-2026
       REDIS_HOST: redis
     volumes:
-      - ppob-storage:/var/www/html/storage
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
     depends_on:
       - app
     networks:
@@ -117,7 +118,7 @@ services:
       DB_PASSWORD: ganti-sandi-ini-2026
       REDIS_HOST: redis
     volumes:
-      - ppob-storage:/var/www/html/storage
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
     depends_on:
       - app
     networks:
@@ -136,13 +137,7 @@ services:
       MYSQL_PASSWORD: ganti-sandi-ini-2026
       MYSQL_ROOT_PASSWORD: ganti-sandi-root-ini-2026
     volumes:
-      - ppob-mysql:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 40s
+      - /DATA/AppData/ppob/mysql:/var/lib/mysql
     networks:
       - ppob
     # Port sengaja tidak diekspos — database hanya diakses antar-container.
@@ -154,21 +149,18 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - ppob-redis:/data
+      - /DATA/AppData/ppob/redis:/data
     networks:
       - ppob
-
-volumes:
-  ppob-mysql:
-  ppob-redis:
-  # Berisi .env, APP_KEY, log, dan berkas unggahan.
-  # JANGAN dihapus — APP_KEY yang hilang membuat kredensial provider
-  # yang tersimpan terenkripsi tidak bisa dibaca lagi.
-  ppob-storage:
 
 networks:
   ppob:
     driver: bridge
+
+# CATATAN DATA
+# /DATA/AppData/ppob/storage berisi .env, APP_KEY, log, dan berkas
+# unggahan. JANGAN dihapus — APP_KEY yang hilang membuat kredensial
+# provider yang tersimpan terenkripsi tidak bisa dibaca lagi.
 
 x-casaos:
   architectures:
@@ -201,7 +193,7 @@ x-casaos:
       kode. Dilengkapi aplikasi Flutter untuk Android dan iOS.
   tips:
     custom: >-
-      Ganti DB_PASSWORD di keempat service dan sesuaikan APP_URL dengan
+      Ganti sandi database di keempat service dan sesuaikan APP_URL dengan
       IP CasaOS Anda sebelum install. Login awal admin@ppob.test dengan
       kata sandi "password" - segera ganti setelah masuk.
   container:

@@ -10,8 +10,13 @@ COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY backend/public /var/www/html/public
 
 # Berkas unggahan (bukti transfer, avatar, banner) berasal dari volume
-# storage bersama yang di-mount saat runtime ke storage/app/public.
-RUN mkdir -p /var/www/html/storage \
+# storage bersama yang di-mount saat runtime.
+#
+# Symlink dibuat di sini, bukan lewat `artisan storage:link`: direktori
+# public/ hanya ada di image ini, sedangkan perintah artisan berjalan di
+# container app — symlink yang dibuatnya tidak akan terlihat oleh nginx.
+RUN mkdir -p /var/www/html/storage/app/public \
+    && ln -sfn /var/www/html/storage/app/public /var/www/html/public/storage \
     && chown -R nginx:nginx /var/www/html
 
 EXPOSE 80
