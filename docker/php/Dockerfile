@@ -7,7 +7,7 @@ FROM php:8.3-fpm-alpine AS base
 
 RUN apk add --no-cache \
         git curl zip unzip icu-dev oniguruma-dev libzip-dev \
-        freetype-dev libjpeg-turbo-dev libpng-dev supervisor \
+        freetype-dev libjpeg-turbo-dev libpng-dev supervisor su-exec \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql mbstring bcmath intl zip gd opcache pcntl \
@@ -56,6 +56,12 @@ RUN { \
         echo "opcache.jit=tracing"; \
     } > /usr/local/etc/php/conf.d/opcache.ini
 
-USER www-data
+# Entrypoint menyiapkan .env, migrasi, dan cache saat container start,
+# sehingga pemasangan di CasaOS cukup menempelkan berkas compose.
+COPY docker/php/entrypoint.sh /usr/local/bin/entrypoint
+RUN chmod +x /usr/local/bin/entrypoint
 
+# Master php-fpm tetap root (perlu untuk chown volume saat start);
+# worker berjalan sebagai www-data lewat konfigurasi pool bawaan.
+ENTRYPOINT ["entrypoint"]
 CMD ["php-fpm"]

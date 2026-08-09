@@ -1,18 +1,32 @@
 # 7. Pemasangan di CasaOS
 
-CasaOS **tidak bisa membangun image dari UI**, jadi image dibangun sekali lewat SSH, lalu stack-nya dijalankan — bisa dari terminal atau di-import ke UI CasaOS.
+Ada dua cara. **Cara 1 tidak butuh SSH sama sekali** — cukup tempel satu berkas YML.
 
-## 7.1 Pemasangan satu baris
+## 7.1 Cara 1 — tempel YML (disarankan)
 
-SSH ke server CasaOS, lalu:
+Image sudah dibangun otomatis dan tersedia publik di GitHub Container Registry, jadi CasaOS tinggal menariknya.
+
+1. Buka [`casaos-ppob.yml`](https://github.com/mentionabbe-wq/ppob-app/blob/main/casaos-ppob.yml) → klik **Raw** → salin seluruh isinya
+2. CasaOS → **Apps** → tombol **+** → **Custom Install**
+3. Klik ikon **Import** (pojok kanan atas) → tempel → **Submit**
+4. **Ganti dulu dua hal** sebelum Install:
+   - `DB_PASSWORD` — muncul di empat tempat (`app`, `queue`, `scheduler`, `mysql`), semuanya harus sama
+   - `APP_URL` — ganti `192.168.1.100` dengan IP CasaOS Anda
+5. **Install**, tunggu ±2 menit (menarik image + migrasi database)
+
+Buka `http://IP-CASAOS:8081/admin` → login `admin@ppob.test` / `password` → **ganti kata sandinya**.
+
+Migrasi database, pembuatan `APP_KEY` & `JWT_SECRET`, dan pengisian data awal dijalankan sendiri oleh container saat pertama start — tidak ada perintah `artisan` yang perlu Anda ketik.
+
+## 7.2 Cara 2 — lewat SSH (kalau ingin build sendiri)
 
 ```bash
 sudo git clone https://github.com/mentionabbe-wq/ppob-app.git /DATA/AppData/ppob/src && sudo bash /DATA/AppData/ppob/src/deploy/casaos/install.sh
 ```
 
-Selesai. Tidak perlu menyalin berkas manual dari komputer.
+Cara ini membangun image di perangkat Anda sendiri (lebih lama, ±10 menit) dan menyimpan data di `/DATA/AppData/ppob/` sebagai folder biasa, bukan volume Docker. Pilih ini bila ingin memodifikasi kode.
 
-Kalau `git` belum terpasang di CasaOS:
+Kalau `git` belum ada:
 
 ```bash
 sudo apt update && sudo apt install -y git

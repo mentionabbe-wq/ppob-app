@@ -35,13 +35,17 @@ ppob-app/
 6. [`docs/06-deployment.md`](docs/06-deployment.md) — Docker & deployment VPS
 7. [`docs/07-casaos.md`](docs/07-casaos.md) — pemasangan di CasaOS (self-hosted)
 
-## Pasang di CasaOS / server Linux (satu baris)
+## Pasang di CasaOS (tanpa SSH)
+
+Salin isi [`casaos-ppob.yml`](casaos-ppob.yml) → CasaOS → **Apps** → **+** → **Custom Install** → **Import** → tempel → ganti `DB_PASSWORD` dan `APP_URL` → **Install**.
+
+Migrasi database, `APP_KEY`, dan data awal dibuat otomatis saat container pertama start. Panduan lengkap: [`docs/07-casaos.md`](docs/07-casaos.md).
+
+Alternatif lewat SSH (build image sendiri):
 
 ```bash
 sudo git clone https://github.com/mentionabbe-wq/ppob-app.git /DATA/AppData/ppob/src && sudo bash /DATA/AppData/ppob/src/deploy/casaos/install.sh
 ```
-
-Skrip itu menyiapkan folder data, membuat `.env` + sandi database acak, membangun image, menjalankan seluruh container, lalu menjalankan migrasi & seeder. Panduan lengkap: [`docs/07-casaos.md`](docs/07-casaos.md).
 
 ## Quick Start (Development)
 

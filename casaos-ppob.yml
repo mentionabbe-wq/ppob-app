@@ -1,0 +1,224 @@
+# ══════════════════════════════════════════════════════════════════
+#  PPOB App — pemasangan CasaOS
+#
+#  CasaOS → Apps → tombol + → Custom Install → ikon Import →
+#  tempel seluruh isi berkas ini → Install.
+#
+#  Tidak perlu build, tidak perlu SSH, tidak perlu berkas pendukung.
+#  Migrasi database, pembuatan APP_KEY, dan data awal dijalankan
+#  otomatis oleh container saat pertama kali start.
+#
+#  SEBELUM INSTALL — ganti dua baris ini:
+#    DB_PASSWORD  (di service mysql DAN app DAN queue DAN scheduler)
+#    APP_URL      (sesuaikan IP CasaOS Anda)
+#
+#  Setelah tampil "running", tunggu ±1 menit lalu buka:
+#    http://IP-CASAOS:8081/admin      →  admin@ppob.test / password
+#  GANTI kata sandi itu begitu berhasil masuk.
+# ══════════════════════════════════════════════════════════════════
+
+name: ppob
+
+services:
+
+  # ── Web: nginx + document root ──────────────────────────────────
+  web:
+    image: ghcr.io/mentionabbe-wq/ppob-web:latest
+    container_name: ppob-web
+    restart: unless-stopped
+    ports:
+      # Port 80 dipakai UI CasaOS, jadi aplikasi ini di 8081.
+      - "8081:80"
+    volumes:
+      - ppob-storage:/var/www/html/storage
+    depends_on:
+      - app
+    networks:
+      - ppob
+
+  # ── Aplikasi: PHP-FPM + Laravel ─────────────────────────────────
+  app:
+    image: ghcr.io/mentionabbe-wq/ppob-app:latest
+    container_name: ppob-app
+    restart: unless-stopped
+    environment:
+      CONTAINER_ROLE: app
+      APP_NAME: PPOB App
+      APP_ENV: production
+      APP_DEBUG: "false"
+      # ── GANTI: alamat yang dipakai aplikasi mobile & panel admin ──
+      APP_URL: http://192.168.1.100:8081
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: ppob
+      DB_USERNAME: ppob
+      # ── GANTI: harus sama dengan MYSQL_PASSWORD di service mysql ──
+      DB_PASSWORD: ganti-sandi-ini-2026
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      # Email OTP — isi SMTP Anda (Gmail app password, Mailgun, dll).
+      # Dibiarkan kosong = OTP hanya tercatat di log, tidak terkirim.
+      MAIL_MAILER: log
+      MAIL_HOST: ""
+      MAIL_PORT: "587"
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_ENCRYPTION: tls
+      MAIL_FROM_ADDRESS: noreply@ppob.local
+    volumes:
+      - ppob-storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - ppob
+
+  # ── Antrean: mengirim topup ke provider ─────────────────────────
+  # WAJIB hidup. Tanpa ini semua transaksi berhenti di status "pending".
+  queue:
+    image: ghcr.io/mentionabbe-wq/ppob-app:latest
+    container_name: ppob-queue
+    restart: unless-stopped
+    command: php artisan queue:work redis --queue=topup,notifications,maintenance,default --tries=3 --max-time=3600 --sleep=1
+    environment:
+      CONTAINER_ROLE: queue
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: ppob
+      DB_USERNAME: ppob
+      # ── GANTI: samakan dengan DB_PASSWORD di atas ──
+      DB_PASSWORD: ganti-sandi-ini-2026
+      REDIS_HOST: redis
+    volumes:
+      - ppob-storage:/var/www/html/storage
+    depends_on:
+      - app
+    networks:
+      - ppob
+
+  # ── Penjadwal: rekonsiliasi transaksi & sinkronisasi katalog ────
+  scheduler:
+    image: ghcr.io/mentionabbe-wq/ppob-app:latest
+    container_name: ppob-scheduler
+    restart: unless-stopped
+    command: php artisan schedule:work
+    environment:
+      CONTAINER_ROLE: scheduler
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: ppob
+      DB_USERNAME: ppob
+      # ── GANTI: samakan dengan DB_PASSWORD di atas ──
+      DB_PASSWORD: ganti-sandi-ini-2026
+      REDIS_HOST: redis
+    volumes:
+      - ppob-storage:/var/www/html/storage
+    depends_on:
+      - app
+    networks:
+      - ppob
+
+  # ── Database ────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.4
+    container_name: ppob-mysql
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ppob
+      MYSQL_USER: ppob
+      # ── GANTI: samakan dengan DB_PASSWORD di service app ──
+      MYSQL_PASSWORD: ganti-sandi-ini-2026
+      MYSQL_ROOT_PASSWORD: ganti-sandi-root-ini-2026
+    volumes:
+      - ppob-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    networks:
+      - ppob
+    # Port sengaja tidak diekspos — database hanya diakses antar-container.
+
+  # ── Cache & antrean ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ppob-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - ppob-redis:/data
+    networks:
+      - ppob
+
+volumes:
+  ppob-mysql:
+  ppob-redis:
+  # Berisi .env, APP_KEY, log, dan berkas unggahan.
+  # JANGAN dihapus — APP_KEY yang hilang membuat kredensial provider
+  # yang tersimpan terenkripsi tidak bisa dibaca lagi.
+  ppob-storage:
+
+networks:
+  ppob:
+    driver: bridge
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: web
+  author: mentionabbe-wq
+  developer: mentionabbe-wq
+  category: Bisnis
+  icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/wallet.png
+  index: /admin
+  port_map: "8081"
+  scheme: http
+  store_app_id: ppob-app
+  title:
+    en_us: PPOB App
+    id: PPOB App
+  tagline:
+    en_us: Prepaid credit & bill payment platform
+    id: Aplikasi jualan pulsa & PPOB
+  description:
+    en_us: >-
+      REST API and admin panel for selling prepaid credit, data packages,
+      electricity tokens, and bill payments. Pluggable PPOB providers
+      (Digiflazz, VIP Reseller). Companion Flutter app for Android/iOS.
+    id: >-
+      REST API dan panel admin untuk jualan pulsa, paket data, token
+      listrik, dan pembayaran tagihan (BPJS, PDAM, Telkom, TV kabel,
+      e-wallet, voucher game). Provider PPOB dapat diganti tanpa mengubah
+      kode. Dilengkapi aplikasi Flutter untuk Android dan iOS.
+  tips:
+    custom: >-
+      Ganti DB_PASSWORD di keempat service dan sesuaikan APP_URL dengan
+      IP CasaOS Anda sebelum install. Login awal admin@ppob.test dengan
+      kata sandi "password" - segera ganti setelah masuk.
+  container:
+    shell: sh
+    privileged: false
+    envs:
+      - container: APP_URL
+        description:
+          id: Alamat aplikasi, contoh http://192.168.1.100:8081
+      - container: DB_PASSWORD
+        description:
+          id: Sandi database - harus sama di app, queue, scheduler, mysql
+    ports:
+      - container: "80"
+        description:
+          id: Panel admin dan REST API
+    volumes:
+      - container: /var/www/html/storage
+        description:
+          id: Konfigurasi, APP_KEY, log, dan bukti transfer
