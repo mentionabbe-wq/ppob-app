@@ -1,0 +1,59 @@
+# Overlay produksi:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Perbedaan utama dari development:
+#   - image dibangun dari target `production` (kode ikut di-copy, OPcache agresif)
+#   - kode tidak di-bind mount
+#   - MySQL tidak mengekspos port ke publik
+#   - Mailpit dimatikan
+
+services:
+
+  app:
+    build:
+      target: production
+    volumes:
+      - storage-data:/var/www/html/storage
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+    restart: always
+
+  nginx:
+    ports:
+      # Nginx host (dengan TLS) yang meneruskan ke sini — lihat deploy/nginx-production.conf
+      - "127.0.0.1:8080:80"
+    volumes:
+      - storage-data:/var/www/html/storage:ro
+    restart: always
+
+  mysql:
+    # Jangan pernah membuka port database ke internet.
+    ports: []
+    restart: always
+
+  redis:
+    restart: always
+
+  queue:
+    build:
+      target: production
+    volumes:
+      - storage-data:/var/www/html/storage
+    command: php artisan queue:work redis --queue=topup,notifications,maintenance,default --tries=3 --max-time=3600 --sleep=1
+    deploy:
+      replicas: 2
+    restart: always
+
+  scheduler:
+    build:
+      target: production
+    volumes:
+      - storage-data:/var/www/html/storage
+    restart: always
+
+  mailpit:
+    profiles: ["dev"]
+
+volumes:
+  storage-data:

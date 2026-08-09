@@ -1,0 +1,29 @@
+# Normalisasi akhir baris. Repositori ini ditulis di Windows tetapi
+# dijalankan di Linux — skrip shell dengan CRLF akan gagal dieksekusi
+# ("bad interpreter: /usr/bin/env bash^M"), jadi paksa LF.
+* text=auto eol=lf
+
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.conf        text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.php         text eol=lf
+*.dart        text eol=lf
+*.ini         text eol=lf
+.env.example  text eol=lf
+
+# Berkas biner jangan disentuh.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff  binary
+*.woff2 binary
+
+# Statistik bahasa GitHub: abaikan dokumentasi & konfigurasi deploy.
+docs/**   linguist-documentation
+deploy/** linguist-vendored

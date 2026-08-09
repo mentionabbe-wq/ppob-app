@@ -1,0 +1,144 @@
+# Stack PPOB untuk CasaOS.
+#
+# Image dibangun lebih dulu di host (CasaOS tidak bisa build dari UI):
+#   cd /DATA/AppData/ppob/src
+#   docker build -t ppob-app:latest -f docker/php/Dockerfile --target production .
+#
+# Menjalankan:
+#   docker compose -f deploy/casaos/docker-compose.casaos.yml up -d
+# atau import berkas ini lewat CasaOS → Apps → Custom Install → Import.
+#
+# Catatan port: CasaOS memakai port 80 untuk UI-nya sendiri,
+# jadi aplikasi ini dipetakan ke 8081.
+
+name: ppob
+
+services:
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ppob-nginx
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - /DATA/AppData/ppob/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /DATA/AppData/ppob/public:/var/www/html/public:ro
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
+    depends_on:
+      - app
+    networks: [ppob]
+    x-casaos:
+      envs: []
+      ports:
+        - container: "80"
+          description:
+            id: Antarmuka web (panel admin + REST API)
+
+  app:
+    image: ppob-app:latest
+    container_name: ppob-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      # .env disimpan di luar image agar kredensial tidak ikut ter-build
+      # dan tetap bertahan saat image diperbarui.
+      - /DATA/AppData/ppob/env/.env:/var/www/html/.env
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
+      - /DATA/AppData/ppob/public:/var/www/html/public
+      - /DATA/AppData/ppob/firebase:/var/www/html/storage/app/firebase
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks: [ppob]
+
+  mysql:
+    image: mysql:8.4
+    container_name: ppob-mysql
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ppob
+      MYSQL_USER: ppob
+      MYSQL_PASSWORD: ${DB_PASSWORD:-ubah-sandi-ini}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-ubah-sandi-root-ini}
+    volumes:
+      - /DATA/AppData/ppob/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [ppob]
+
+  redis:
+    image: redis:7-alpine
+    container_name: ppob-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - /DATA/AppData/ppob/redis:/data
+    networks: [ppob]
+
+  # Worker antrean: pengiriman topup ke provider & push notification.
+  # Tanpa container ini, transaksi akan tertahan di status "pending".
+  queue:
+    image: ppob-app:latest
+    container_name: ppob-queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work redis --queue=topup,notifications,maintenance,default --tries=3 --max-time=3600 --sleep=1
+    volumes:
+      - /DATA/AppData/ppob/env/.env:/var/www/html/.env
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
+      - /DATA/AppData/ppob/firebase:/var/www/html/storage/app/firebase
+    depends_on:
+      - app
+    networks: [ppob]
+
+  # Penjadwal: rekonsiliasi transaksi menggantung, sinkronisasi katalog
+  # provider, kedaluwarsa deposit, pembersihan log.
+  scheduler:
+    image: ppob-app:latest
+    container_name: ppob-scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    volumes:
+      - /DATA/AppData/ppob/env/.env:/var/www/html/.env
+      - /DATA/AppData/ppob/storage:/var/www/html/storage
+    depends_on:
+      - app
+    networks: [ppob]
+
+networks:
+  ppob:
+    driver: bridge
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: nginx
+  author: self-hosted
+  category: Bisnis
+  developer: ppob-app
+  icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/nginx-proxy-manager.png
+  tagline:
+    id: Aplikasi jualan pulsa & PPOB
+  description:
+    id: >-
+      Backend REST API + panel admin untuk aplikasi jualan pulsa, paket data,
+      token listrik, dan pembayaran tagihan. Terhubung ke provider Digiflazz /
+      VIP Reseller.
+  title:
+    id: PPOB App
+  index: /admin
+  port_map: "8081"
+  scheme: http
+  store_app_id: ppob-app

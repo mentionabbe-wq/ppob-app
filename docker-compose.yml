@@ -1,0 +1,107 @@
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: development
+    container_name: ppob-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/99-ppob.ini:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks: [ppob]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ppob-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [app]
+    networks: [ppob]
+
+  mysql:
+    image: mysql:8.4
+    container_name: ppob-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-ppob}
+      MYSQL_USER: ${DB_USERNAME:-ppob}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootsecret}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "33061:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD:-rootsecret}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [ppob]
+
+  redis:
+    image: redis:7-alpine
+    container_name: ppob-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks: [ppob]
+
+  # Worker antrean: topup, notifikasi, sinkronisasi produk.
+  queue:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: development
+    container_name: ppob-queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work redis --queue=topup,notifications,maintenance,default --tries=3 --max-time=3600
+    volumes:
+      - ./backend:/var/www/html
+    depends_on: [app, redis, mysql]
+    networks: [ppob]
+
+  # Penjadwal Laravel (pengganti cron di dalam container).
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: development
+    container_name: ppob-scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    volumes:
+      - ./backend:/var/www/html
+    depends_on: [app, redis, mysql]
+    networks: [ppob]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ppob-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+    networks: [ppob]
+
+volumes:
+  mysql-data:
+  redis-data:
+
+networks:
+  ppob:
+    driver: bridge
