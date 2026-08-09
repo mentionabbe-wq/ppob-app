@@ -2,35 +2,20 @@
 
 CasaOS **tidak bisa membangun image dari UI**, jadi image dibangun sekali lewat SSH, lalu stack-nya dijalankan — bisa dari terminal atau di-import ke UI CasaOS.
 
-## 7.1 Ringkas (cara cepat)
+## 7.1 Pemasangan satu baris
+
+SSH ke server CasaOS, lalu:
 
 ```bash
-ssh <user>@<ip-casaos>
+sudo git clone https://github.com/mentionabbe-wq/ppob-app.git /DATA/AppData/ppob/src && sudo bash /DATA/AppData/ppob/src/deploy/casaos/install.sh
 ```
 
-```bash
-sudo mkdir -p /DATA/AppData/ppob/src
-```
+Selesai. Tidak perlu menyalin berkas manual dari komputer.
 
-Salin folder `ppob-app` ke `/DATA/AppData/ppob/src` (pilih salah satu):
-
-- **File Manager CasaOS** — seret folder `ppob-app` ke `/DATA/AppData/ppob/`, ganti namanya jadi `src`
-- **scp dari Windows** (PowerShell di komputer Anda):
+Kalau `git` belum terpasang di CasaOS:
 
 ```bash
-scp -r "C:\Users\diana\OneDrive\OneDrive 1\Documents\Cloude Project\ppob-app\." user@ip-casaos:/DATA/AppData/ppob/src/
-```
-
-- **git** (bila sudah di-push ke GitHub):
-
-```bash
-sudo git clone <url-repo> /DATA/AppData/ppob/src
-```
-
-Lalu jalankan pemasang:
-
-```bash
-sudo bash /DATA/AppData/ppob/src/deploy/casaos/install.sh
+sudo apt update && sudo apt install -y git
 ```
 
 Skrip itu membuat struktur folder, meng-generate `.env` + sandi database acak, membangun image, menjalankan 6 container, lalu menjalankan migrasi & seeder. Selesai dalam 5–10 menit (mayoritas untuk build image).
@@ -107,7 +92,7 @@ docker exec ppob-app php artisan queue:work redis --queue=maintenance --once
 ## 7.6 Memperbarui aplikasi
 
 ```bash
-cd /DATA/AppData/ppob/src && sudo git pull
+cd /DATA/AppData/ppob/src && sudo git pull origin main
 ```
 
 ```bash
