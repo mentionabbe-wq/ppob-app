@@ -41,8 +41,14 @@ COPY backend/composer.json backend/composer.lock* ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction
 
 COPY backend/ ./
-RUN composer dump-autoload --optimize --no-dev --classmap-authoritative \
-    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
+
+# Direktori dibuat SEBELUM dump-autoload: `package:discover` yang
+# dipanggil composer menulis manifest ke bootstrap/cache, dan git
+# tidak menyimpan direktori kosong sehingga folder itu belum ada.
+RUN mkdir -p storage/framework/cache/data storage/framework/sessions \
+             storage/framework/views storage/logs storage/app/public \
+             bootstrap/cache \
+    && composer dump-autoload --optimize --no-dev --classmap-authoritative \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 

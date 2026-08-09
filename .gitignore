@@ -6,11 +6,15 @@ backend/.env.*
 !backend/.env.example
 backend/storage/*.key
 backend/storage/app/firebase/
+# Isi direktori runtime diabaikan, tetapi .gitkeep tetap disimpan —
+# tanpa direktori ini `composer dump-autoload` gagal saat build image.
 backend/storage/framework/cache/*
 backend/storage/framework/sessions/*
 backend/storage/framework/views/*
 backend/storage/logs/*
+backend/storage/app/public/*
 backend/bootstrap/cache/*
+!**/.gitkeep
 backend/public/storage
 backend/public/hot
 backend/.phpunit.result.cache
