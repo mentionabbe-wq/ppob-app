@@ -14,6 +14,27 @@ ROLE="${CONTAINER_ROLE:-app}"
 
 log() { printf '\033[1;34m[ppob]\033[0m %s\n' "$1"; }
 
+# Tanpa ini, kegagalan inisialisasi hanya tampak sebagai 502 Bad Gateway
+# di browser karena container berhenti sebelum php-fpm sempat berjalan.
+on_error() {
+    code=$?
+
+    printf '\n\033[1;31m[ppob] Inisialisasi gagal (kode %s).\033[0m\n' "${code}"
+    echo "Penyebab yang paling sering:"
+    echo "  1. Sandi database berbeda antar service. DB_PASSWORD di app,"
+    echo "     queue, scheduler harus sama persis dengan MYSQL_PASSWORD"
+    echo "     di service mysql."
+    echo "  2. Folder MySQL sudah berisi data dari pemasangan sebelumnya"
+    echo "     dengan sandi lama. MySQL mengabaikan MYSQL_PASSWORD bila"
+    echo "     data sudah ada. Hapus /DATA/AppData/ppob/mysql lalu install"
+    echo "     ulang (data transaksi akan hilang)."
+    echo "  3. Izin tulis pada /DATA/AppData/ppob/storage."
+
+    exit "${code}"
+}
+
+trap on_error EXIT
+
 # ── Menyiapkan .env di volume persisten ─────────────────
 # .env tinggal di dalam volume storage agar APP_KEY dan JWT_SECRET
 # bertahan saat image diperbarui. Tanpa itu, kredensial provider yang
@@ -44,6 +65,11 @@ init_env() {
             echo "${key}=${value}" >> "${ENV_FILE}"
         fi
     done
+
+    # Berkas dibuat oleh root, sedangkan artisan berjalan sebagai
+    # www-data dan perlu menulis APP_KEY serta JWT_SECRET ke sini.
+    chown www-data:www-data "${ENV_FILE}"
+    chmod 640 "${ENV_FILE}"
 }
 
 wait_for_env() {
@@ -123,5 +149,8 @@ else
     wait_for_database
     log "Container '${ROLE}' siap"
 fi
+
+# Inisialisasi selesai — kegagalan setelah titik ini milik php-fpm.
+trap - EXIT
 
 exec "$@"
